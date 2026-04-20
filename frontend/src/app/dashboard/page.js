@@ -8,6 +8,11 @@ import {
   Wallet, LogOut, Zap, TrendingUp, TrendingDown, Users, Activity 
 } from 'lucide-react';
 
+// Backend URL constant
+
+// Backend URL constant
+const BACKEND_URL = 'https://abhi-qa-fullstack.onrender.com';
+
 // --- Sub-Component: Animated Counter for Participants ---
 const AnimatedCounter = ({ count }) => {
   const controls = useAnimation();
@@ -46,7 +51,7 @@ export default function Dashboard() {
     setUserData(storedUser);
 
     // Socket Connection Setup
-    socketRef.current = io('http://localhost:5000');
+    socketRef.current = io(BACKEND_URL, { transports: ['websocket'] });
 
     // Live Price Update via Socket
     socketRef.current.on('priceUpdate', (data) => {
@@ -88,7 +93,7 @@ export default function Dashboard() {
   // Function to sync balance after settlement
   const fetchLatestBalance = async (token) => {
     try {
-      const res = await axios.get('http://localhost:5000/api/user/profile', {
+      const res = await axios.get(`${BACKEND_URL}/api/user/profile`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       setUserData(res.data);
@@ -104,7 +109,7 @@ export default function Dashboard() {
       const token = localStorage.getItem('token');
       const currentRoundId = `RND-${new Date().getHours()}`;
 
-      const res = await axios.post('http://localhost:5000/api/trade/predict', {
+      const res = await axios.post(`${BACKEND_URL}/api/trade/predict`, {
         direction: prediction,
         amount: Number(amount),
         roundId: currentRoundId,
