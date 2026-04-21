@@ -16,13 +16,12 @@ export default function LoginPage() {
     setError('');
     setLoading(true);
 
-    try {
-      // Backend integration
-      const res = await axios.post('http://localhost:5000/api/user/login', {
-        email,
-        password
-      });
-
+  try {
+  // Backend integration - Change this line
+  const res = await axios.post('https://abhi-qa-fullstack.onrender.com/api/user/login', {
+    email,
+    password
+  });
       // Backend response mein 'token' aur 'user' dono aa rahe hain
       if (res.data.token) {
         console.log("✅ Login Success!");

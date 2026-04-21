@@ -10,7 +10,7 @@ export default function RegisterPage() {
   const handleRegister = async (e) => {
     e.preventDefault();
     try {
-      await axios.post('http://localhost:5000/api/user/register', formData);
+      await axios.post('https://abhi-qa-fullstack.onrender.com/api/user/register', formData);
       alert("Registration Successful! Now Login.");
       router.push('/login');
     } catch (err) {
