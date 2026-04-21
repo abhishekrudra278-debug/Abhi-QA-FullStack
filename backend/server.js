@@ -4,9 +4,10 @@ const mongoose = require('mongoose');
 const cron = require('node-cron');
 const axios = require('axios');
 const cors = require('cors');
-const http = require('http'); // Required for Socket.io
-const { Server } = require('socket.io'); // WebSocket
-const WebSocket = require('ws'); // For Binance Stream
+const http = require('http');
+const { Server } = require('socket.io');
+const WebSocket = require('ws');
+const rateLimit = require('express-rate-limit'); // Naya Import
 
 // Routes & Controllers
 const tradeRoutes = require('./Routes/tradeRoutes');
@@ -14,7 +15,19 @@ const userRoutes = require('./Routes/userRoutes');
 const tradeController = require('./controller/tradeController');
 
 const app = express();
-const server = http.createServer(app); // Create HTTP server
+
+// --- 🛡️ SECURITY & RATE LIMITING --Render/Vercel ke liye zaruri hai taaki asli IP track ho sake
+app.set('trust proxy', 1);
+
+const registerLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 Minutes
+    max: 5, // 1 IP se sirf 5 requests allow hain
+    message: { error: "Too many registrations. Please try again after 15 minutes." },
+    standardHeaders: true,
+    legacyHeaders: false,
+});
+
+const server = http.createServer(app);
 const io = new Server(server, {
     cors: { 
         origin: "https://abhi-qa-full-stack.vercel.app",
@@ -22,12 +35,11 @@ const io = new Server(server, {
     }
 });
 
-// Middleware
-// Middleware
+// --- 🛠️ MIDDLEWARE ---
 app.use(cors({
-    origin: ["https://abhi-qa-full-stack.vercel.app", "http://localhost:3000"], // Vercel + Local dono allow
+    origin: ["https://abhi-qa-full-stack.vercel.app", "http://localhost:3000"],
     methods: ["GET", "POST", "PUT", "DELETE"],
-    credentials: true // Agar tum cookies ya headers bhej rahe ho toh zaruri hai
+    credentials: true
 }));
 app.use(express.json());
 
@@ -36,18 +48,18 @@ mongoose.connect(process.env.MONGO_URI)
   .then(() => console.log('✅ MongoDB Connected Successfully'))
   .catch(err => console.error('❌ MongoDB Connection Error:', err));
 
-// Routes
+// --- 📡 ROUTES ---
+// Sirf register par limit lagao taaki login/trade block na ho galati se
+app.use('/api/user/register', registerLimiter); 
+
 app.use('/api/trade', tradeRoutes);
 app.use('/api/user', userRoutes);
 
-// --- ⚡ WEBSOCKET LOGIC (Binance Live Stream) ---
+// --- ⚡ WEBSOCKET LOGIC (Binance) ---
 const binanceWS = new WebSocket('wss://stream.binance.com:9443/ws/btcusdt@ticker');
-
 binanceWS.on('message', (data) => {
     const ticker = JSON.parse(data);
     const livePrice = parseFloat(ticker.c).toFixed(2);
-    
-    // Sabhi connected users ko live price bhej do
     io.emit('priceUpdate', { price: livePrice });
 });
 
@@ -56,35 +68,22 @@ io.on('connection', (socket) => {
     socket.on('disconnect', () => console.log('👤 User disconnected'));
 });
 
-// --- ⏰ AUTOMATION: Hourly Round Settlement ---
+// --- ⏰ CRON JOBS ---
 cron.schedule('0 * * * *', async () => {
-    console.log('⏰ Settlement Triggered: Closing Previous Round...');
-    
+    console.log('⏰ Settlement Triggered...');
     try {
-        // 1. Get Final Closing Price
         const response = await axios.get('https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT');
         const finalPrice = parseFloat(response.data.price); 
-
-        // 2. Identify Last Round ID
         const now = new Date();
         now.setHours(now.getHours() - 1);
         const lastRoundId = `RND-${now.getHours()}`;
 
-        console.log(`💰 Settling Round: ${lastRoundId} with Price: ${finalPrice}`);
-
-        // 3. Settle Winnings (Calling Controller)
-        // Ensure you have this function in your tradeController
         await tradeController.distributeWinnings(
             { body: { roundId: lastRoundId, finalPrice } }, 
             { status: () => ({ json: (data) => console.log("Settlement Done:", data) }) }
         );
-
-        // 4. Announce via WebSocket to Frontend
         io.emit('roundSettled', { roundId: lastRoundId, finalPrice });
-
-        // 5. Create New Round
         await tradeController.autoCreateRound();
-        
     } catch (err) {
         console.error("❌ Cron Error:", err.message);
     }
@@ -101,8 +100,6 @@ app.get('/api/live-price', async (req, res) => {
 });
 
 const PORT = process.env.PORT || 5000;
-// CRITICAL: App.listen ki jagah server.listen use karna hai
 server.listen(PORT, () => {
     console.log(`🚀 Server + WebSocket running on port ${PORT}`);
-    console.log(`📡 API: http://localhost:${PORT}/api/live-price`);
 });

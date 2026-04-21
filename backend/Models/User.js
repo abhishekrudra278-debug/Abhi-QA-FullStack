@@ -7,24 +7,39 @@ const userSchema = new mongoose.Schema({
         required: true, 
         unique: true 
     }, 
+    // ... other fields
     name: { 
         type: String, 
-        required: [true, "Name is required"],
+        required: true,
         trim: true,
-        match: [/^[a-zA-Z\s]{3,30}$/, "Name should only contain alphabets and spaces (3-30 chars)"]
+        validate: {
+            validator: function(v) {
+                // BUG 3 Fix: At least 3 letters, can't be just spaces
+                return /^[a-zA-Z]{1,}[a-zA-Z\s]{2,29}$/.test(v.trim());
+            },
+            message: "Name must start with a letter and contain only alphabets/spaces."
+        }
     },
     email: { 
         type: String, 
-        required: [true, "Email is required"], 
+        required: true, 
         unique: true,
-        lowercase: true, // Sabse zaruri: test@ vs TEST@ fix
+        lowercase: true,
         trim: true,
-        match: [/^[^\s@]+@[^\s@]+\.[^\s@]+$/, "Please enter a valid email address"]
+        // BUG 1 Fix: Strict Email Regex
+        match: [/^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/, "Please use a valid email format (e.g., test@domain.com)"]
     },
     password: { 
         type: String, 
-        required: [true, "Password is required"],
-        minlength: [8, "Password must be at least 8 characters long"]
+        required: true,
+        // BUG 2 Fix: Custom Password Complexity Validator
+        validate: {
+            validator: function(v) {
+                // Min 8 chars, 1 Uppercase, 1 Lowercase, 1 Number, 1 Special Char
+                return /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/.test(v);
+            },
+            message: "Password must be 8+ chars with uppercase, lowercase, number, and special character."
+        }
     },
     wallet: { 
         type: Number, 

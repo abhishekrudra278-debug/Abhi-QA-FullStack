@@ -1,3 +1,4 @@
+const crypto = require('crypto'); // For Secure UUID
 const User = require('../Models/User');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
@@ -6,40 +7,34 @@ exports.register = async (req, res) => {
     try {
         let { name, email, password } = req.body;
 
-        // 1. Backend Sanitization (Garbage check)
-        if (!name || !email || !password) {
-            return res.status(400).json({ error: "All fields are required" });
+        // BUG 3 Fix: Trim name and check if empty after trim
+        if (!name || name.trim().length < 3) {
+            return res.status(400).json({ error: "Name must be at least 3 non-empty characters" });
         }
 
-        // 2. Strict Regex Validation (Backend safety net)
-        const nameRegex = /^[a-zA-Z\s]{3,30}$/;
-        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        // BUG 6 Fix: Secure UUID (Non-predictable)
+        const uid = `UID-${crypto.randomUUID()}`;
+
+        const user = new User({ 
+            name: name.trim(), 
+            email: email.toLowerCase().trim(), 
+            password, 
+            uid 
+        });
         
-        if (!nameRegex.test(name)) return res.status(400).json({ error: "Invalid Name format" });
-        if (!emailRegex.test(email)) return res.status(400).json({ error: "Invalid Email format" });
-        if (password.length < 8) return res.status(400).json({ error: "Password too weak" });
-
-        // 3. Normalization (Case-insensitivity fix)
-        email = email.toLowerCase().trim();
-
-        // 4. Duplicate Check
-        const existingUser = await User.findOne({ email });
-        if (existingUser) {
-            return res.status(400).json({ error: "User already exists with this email" });
-        }
-
-        // 5. Generate UID in Backend (Security fix)
-        const uid = `UID_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
-
-        const user = new User({ name, email, password, uid });
-        
-        console.log(`⏳ Registering: ${email}`);
         await user.save();
-        
         res.status(201).json({ message: "User Registered Successfully!" });
+
     } catch (err) {
-        console.error("❌ REGISTER ERROR:", err.message);
-        res.status(500).json({ error: "Internal Server Error" });
+        // BUG 4 & 5 Fix: Proper Error Sanitization (No raw leaks)
+        if (err.code === 11000) {
+            const field = Object.keys(err.keyValue)[0];
+            return res.status(400).json({ error: `${field.charAt(0).toUpperCase() + field.slice(1)} already exists` });
+        }
+        
+        // Don't leak raw err.message to client in production
+        console.error("Registration Error:", err); 
+        res.status(500).json({ error: "An internal server error occurred" });
     }
 };
 
