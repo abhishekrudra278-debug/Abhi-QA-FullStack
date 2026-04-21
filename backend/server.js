@@ -16,11 +16,19 @@ const tradeController = require('./controller/tradeController');
 const app = express();
 const server = http.createServer(app); // Create HTTP server
 const io = new Server(server, {
-    cors: { origin: "*" } // Development ke liye sab allow hai
+    cors: { 
+        origin: "https://abhi-qa-full-stack.vercel.app",
+        methods: ["GET", "POST"]
+    }
 });
 
 // Middleware
-app.use(cors());
+// Middleware
+app.use(cors({
+    origin: ["https://abhi-qa-full-stack.vercel.app", "http://localhost:3000"], // Vercel + Local dono allow
+    methods: ["GET", "POST", "PUT", "DELETE"],
+    credentials: true // Agar tum cookies ya headers bhej rahe ho toh zaruri hai
+}));
 app.use(express.json());
 
 // MongoDB Connection
