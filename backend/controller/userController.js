@@ -7,12 +7,12 @@ exports.register = async (req, res) => {
     try {
         let { name, email, password } = req.body;
 
-        // BUG 3 Fix: Trim name and check if empty after trim
-        if (!name || name.trim().length < 3) {
-            return res.status(400).json({ error: "Name must be at least 3 non-empty characters" });
+        // Controller Level Check (Fast rejection)
+        if (!name || !email || !password) {
+            return res.status(400).json({ error: "All fields are required" });
         }
 
-        // BUG 6 Fix: Secure UUID (Non-predictable)
+        // Secure UUID (Non-predictable)
         const uid = `UID-${crypto.randomUUID()}`;
 
         const user = new User({ 
@@ -23,17 +23,26 @@ exports.register = async (req, res) => {
         });
         
         await user.save();
+        console.log(`✅ User Registered: ${email}`);
         res.status(201).json({ message: "User Registered Successfully!" });
 
     } catch (err) {
-        // BUG 4 & 5 Fix: Proper Error Sanitization (No raw leaks)
+        console.error("❌ REGISTER ERROR:", err);
+
+        // 1. Mongoose Validation Error (Regex/Complexity fail)
+        if (err.name === 'ValidationError') {
+            // Sirf pehla error message uthao aur frontend ko bhej do
+            const firstError = Object.values(err.errors)[0].message;
+            return res.status(400).json({ error: firstError });
+        }
+
+        // 2. Duplicate Key Error (E11000)
         if (err.code === 11000) {
             const field = Object.keys(err.keyValue)[0];
             return res.status(400).json({ error: `${field.charAt(0).toUpperCase() + field.slice(1)} already exists` });
         }
         
-        // Don't leak raw err.message to client in production
-        console.error("Registration Error:", err); 
+        // 3. Fallback for other errors
         res.status(500).json({ error: "An internal server error occurred" });
     }
 };
@@ -41,9 +50,10 @@ exports.register = async (req, res) => {
 exports.login = async (req, res) => {
     let { email, password } = req.body;
     try {
-        if (!email || !password) return res.status(400).json({ error: "Email and password required" });
+        if (!email || !password) {
+            return res.status(400).json({ error: "Email and password required" });
+        }
 
-        // Always query with lowercase email
         email = email.toLowerCase().trim();
 
         const user = await User.findOne({ email });
@@ -68,6 +78,7 @@ exports.login = async (req, res) => {
             } 
         });
     } catch (err) {
+        console.error("❌ LOGIN ERROR:", err.message);
         res.status(500).json({ error: "Login failed" });
     }
 };
